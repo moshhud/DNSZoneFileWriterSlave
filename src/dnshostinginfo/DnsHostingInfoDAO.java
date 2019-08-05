@@ -70,13 +70,11 @@ public class DnsHostingInfoDAO {
 		String sql = null;
 		
 		try {
-			sql = "UPDATE "+tableName +" set dnsZoneFileUpdateStatus=?,dnsIsFirstWrite=? where dnsID in("+ids+")";
+			sql = "UPDATE "+tableName +" set dnsZoneFileForSlave=? where dnsID in("+ids+")";
 			connection = DatabaseManager.getInstance().getConnection();
 			pstmt = (PreparedStatement) connection.prepareStatement(sql);
 			int i=1;
-			pstmt.setInt(i++, 0);
-			pstmt.setInt(i++, 0);
-			//pstmt.setString(i++, ids);
+			pstmt.setInt(i++, 0);			
 			
 			if (pstmt.executeUpdate() > 0) {
 				ro.clear();
@@ -114,7 +112,7 @@ public class DnsHostingInfoDAO {
 			
 			sql = "select dnsID,dnsClientID,dnsFQDN,dnsPrimaryDNS"
 					+ ",dnsSecondaryDNS,dnsTertiaryDNS,dnsEmail,dnsIsPrivileged"
-					+ ",dnsZoneFileUpdateStatus,dnsIsFirstWrite,dnsTLDType"
+					+ ",dnsZoneFileUpdateStatus,dnsIsFirstWrite,dnsTLDType,dnsZoneFileForSlave"
 					+ "  from "+tableName+" where 1=1 "+condition;
 			//logger.debug(sql);
 			stmt = connection.createStatement();
@@ -136,6 +134,7 @@ public class DnsHostingInfoDAO {
 				dto.setIsFirstWrite(rs.getInt("dnsIsFirstWrite"));
 				dto.setTldType(rs.getInt("dnsTLDType"));
 				dto.setTertiaryDNS(rs.getString("dnsTertiaryDNS"));
+				dto.setZoneFileForSlave(rs.getInt("dnsZoneFileForSlave"));
 				data.put(rs.getLong("dnsID"), dto);
 			}
 			

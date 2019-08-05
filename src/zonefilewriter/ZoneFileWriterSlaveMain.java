@@ -6,15 +6,15 @@ import org.apache.log4j.PropertyConfigurator;
 import shutdown.ShutDownListener;
 import shutdown.ShutDownService;
 
-public class ZoneFileWriterMain implements ShutDownListener{
+public class ZoneFileWriterSlaveMain implements ShutDownListener{
 	
-	static Logger logger = Logger.getLogger(ZoneFileWriterMain.class);
-	public static ZoneFileWriterMain obMain = null;
+	static Logger logger = Logger.getLogger(ZoneFileWriterSlaveMain.class);
+	public static ZoneFileWriterSlaveMain obMain = null;
 	public static   ZoneFileWriter obZoneFileWriter = null;
 	public static void main(String[] args)	
 	{
 		PropertyConfigurator.configure("log4j.properties");
-		obMain = new ZoneFileWriterMain();
+		obMain = new ZoneFileWriterSlaveMain();
 		
 		obZoneFileWriter = ZoneFileWriter.getInstance();
 		obZoneFileWriter.start();

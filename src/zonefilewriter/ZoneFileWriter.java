@@ -31,7 +31,7 @@ public class ZoneFileWriter extends Thread{
 	public static String namedFilePath = "/etc";
 	public static String namedFileName = "named.conf";
 	public static long interval = 60;
-	public static String named_allowed_update_ip = "123.49.12.149;123.49.12.182;";
+	public static String master_server_ip = "123.49.12.149;123.49.12.182;";
 	public static String named_allowed_update_ip_rev = "123.49.12.3";
 	LinkedHashMap<Long, DnsHostingInfoDTO> data = null;
 	public static String primaryDNS = "dns.bttb.net.bd";
@@ -122,7 +122,7 @@ public class ZoneFileWriter extends Thread{
 		ReturnObject ro = new ReturnObject();
 		try {
 			DnsHostingInfoDAO dao = new DnsHostingInfoDAO();
-			ro = dao.getIDList(DNS_HOSTING_TABLE_NAME,"dnsID"," and dnsZoneFileUpdateStatus>=1 limit 100");
+			ro = dao.getIDList(DNS_HOSTING_TABLE_NAME,"dnsID"," and dnsZoneFileForSlave>=1 limit 100");
 			if(ro != null && ro.getIsSuccessful()) {
 				
 				ArrayList<Long> IDList = (ArrayList)ro.getData();
@@ -227,8 +227,8 @@ public class ZoneFileWriter extends Thread{
 		        	serverType =  (String) properties.get("serverType");
 		        }
 		        
-		        if(properties.get("named_allowed_update_ip")!=null){
-		        	named_allowed_update_ip =  (String) properties.get("named_allowed_update_ip");
+		        if(properties.get("master_server_ip")!=null){
+		        	master_server_ip =  (String) properties.get("master_server_ip");
 		        }
 		        if(properties.get("primaryDNS")!=null){
 		        	primaryDNS =  (String) properties.get("primaryDNS");
