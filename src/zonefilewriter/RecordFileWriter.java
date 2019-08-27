@@ -12,20 +12,14 @@ import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
-
 import org.apache.log4j.Logger;
-
-import common.ApplicationConstants;
-import common.EmailValidator;
-import common.SmsMailLogDAO;
-import dnshostinginfo.DNSHostingConstant;
 import dnshostinginfo.DnsHostingInfoDTO;
 import dnshostinginfo.DnsHostingZoneRecordDTO;
 
 
 public class RecordFileWriter {
 	static Logger logger = Logger.getLogger(RecordFileWriter.class);
-	String winDir = "D:/root";	//test dir for windows
+	
 	String[] dotBDSlds = {"com", "co", "edu", "gov", "info", "net", "org", "ac", "mil" ,"ws", "tv"};
 		
 	private  final String NAMED_FILE_CONTENT ="zone \"VAR_DOMAIN\" IN {\n"
@@ -33,7 +27,33 @@ public class RecordFileWriter {
 			+ "  file \""+ZoneFileWriter.zoneFileLocation+"/VAR_ZONE_FILE_NAME\";\n"
 			+ "  masters {VAR_ALLOWED_UPDATE_IP;};\n"
 			+ "};";	
-	
+	private  final String REVERSE_ZONE_FILE_CONSTANT_PORTION = "$TTL 86400\n"+
+			"VAR_FQDN.  900  IN SOA 	VAR_DNS_1. VAR_DNS_2.  (\n"+
+			"   VAR_SERIAL_NUMBER	; Serial\n"+
+			"   1200	; Refresh \n"+
+			"   3600	; Retry\n"+
+			"   604800	; Expire\n"+
+			"   86400 )	; Minimum ttl\n"+
+			" \t\t\t\tIN	NS	VAR_DEFAULT_DNS_1. \n"+
+			" \t\t\t\tIN	NS	VAR_DEFAULT_DNS_2. \n";
+	public static String getSerialNumber(long currentTime){
+
+		Calendar cal = new GregorianCalendar();
+		int year = cal.get(cal.YEAR);		
+		int month = cal.get(cal.MONTH)+1;
+		String monthString = (month<10?"0"+month:""+month);
+		int day = cal.get(cal.DAY_OF_MONTH);
+		String dayString = (day<10?"0"+day:""+day);
+		int hour = cal.get(cal.HOUR_OF_DAY);
+		int min = cal.get(cal.MINUTE);
+		
+		int countOfHalfHour = hour*2+(min>=30?1:0);
+		String countOfHalfHourString = ""+countOfHalfHour;
+		while(countOfHalfHourString.length()<2){
+			countOfHalfHourString="0"+countOfHalfHour;
+		}
+		return ""+year+monthString+dayString+countOfHalfHourString;
+	}
 	public void writeIntoNamedFile(String domain, String fileName,Writer writer) {
 		try {
 			
@@ -54,6 +74,8 @@ public class RecordFileWriter {
 		LinkedHashMap<String, String> mxData = new LinkedHashMap<String, String>();
 		LinkedHashMap<String, String> aData = new LinkedHashMap<String, String>();
 		try {		
+			String primaryDNS = dto.getPrimaryDNS().length()>3? dto.getPrimaryDNS():ZoneFileWriter.primaryDNS;
+			String secondaryDNS = dto.getSecondaryDNS().length()>3? dto.getSecondaryDNS():ZoneFileWriter.secondaryDNS;	
 			
 			if(dto.getZoneRecordDTOMap().values()!=null && dto.getZoneRecordDTOMap().values().size()>0) {
 				for (DnsHostingZoneRecordDTO zoneDTO : dto.getZoneRecordDTOMap().values()) {
@@ -74,7 +96,7 @@ public class RecordFileWriter {
 				}				
 				
 				if(aData!=null&&aData.size()>0) {
-					createReverseDNSFile(mxData,aData);
+					createReverseDNSFile(mxData,aData,primaryDNS,secondaryDNS);
 				}
 			}else {
 				logger.debug("No zone Record found for "+dto.getDomainName());
@@ -126,7 +148,7 @@ public class RecordFileWriter {
 	
 	public void deleteZoneFileEntry(DnsHostingInfoDTO dto, String filePath) {
 		try {
-			String namedFile = winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName;
+			String namedFile = ZoneFileWriter.winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName;
 			
 			deleteContent(namedFile,dto.getDomainName());
 	        
@@ -174,26 +196,71 @@ public class RecordFileWriter {
     		logger.fatal(e.toString());
     	}
 	}	
+	public void removeDuplicate(String str,String fileName) {
+		try {	       
+	        BufferedReader file = new BufferedReader(new FileReader(fileName));
+	        String line;
+	        StringBuffer inputBuffer = new StringBuffer();
 	
-	public  void createReverseDNSFile(LinkedHashMap<String, String> mxData,LinkedHashMap<String, String> aData) {
+	        while ((line = file.readLine()) != null) {
+	        	if(line.contains(str)) continue;
+	            inputBuffer.append(line);
+	            inputBuffer.append('\n');
+	        }
+	        String inputStr = inputBuffer.toString();	
+	        file.close();
+	        
+	        FileOutputStream fileOut = new FileOutputStream(fileName);
+	        fileOut.write(inputStr.getBytes());
+	        fileOut.close();
+	
+	    } catch (Exception e) {
+	        logger.fatal("Error: "+e.toString());
+	    }
+	}
+		
+	public  void createReverseDNSFile(LinkedHashMap<String, String> mxData,LinkedHashMap<String, String> aData,String primaryDNS, String secondaryDNS) {
 		
 		try {	
 			for(Entry<String, String> entry : aData.entrySet()) {				
 				String[] arr = entry.getValue().split(Pattern.quote("."));
 				String reverse = arr[2]+"."+arr[1]+"."+arr[0];
 				logger.debug("reverse: "+reverse);			
-				String reverseFileName = "db."+reverse;
+				String forward = arr[0]+"."+arr[1]+"."+arr[2];
+				String reverseFileName = "rev."+forward;
 				String fqdn = reverse+".in-addr.arpa";
-				String fileName = winDir+ZoneFileWriter.zoneFileLocation+"/"+ZoneFileWriter.reverseDIR+"/"+reverseFileName;
+				String value = mxData.get(entry.getKey());;
+				String content = arr[3]+" PTR "+value;
+				String fileName = ZoneFileWriter.winDir+ZoneFileWriter.zoneFileLocation+"/"+ZoneFileWriter.reverseDIR+"/"+reverseFileName;
 				File file = new File(fileName);
-				
+				FileWriter fw = null;
 				boolean writeReverseNamedFile = false;
-				if(!file.exists()) {
-					writeReverseNamedFile = true;					
+				if(file.exists()) {
+					removeDuplicate(value,fileName);
+					fw = new FileWriter(file,true);					
+					fw.write(content);
+					fw.write("\n");
+					
+				}else {
+					fw = new FileWriter(file,false);
+					String header = REVERSE_ZONE_FILE_CONSTANT_PORTION.replace("VAR_FQDN", fqdn);
+					header = header.replaceAll("VAR_DNS_1", primaryDNS);
+					header = header.replaceAll("VAR_DNS_2", secondaryDNS);					
+					header = header.replaceAll("VAR_SERIAL_NUMBER", getSerialNumber(System.currentTimeMillis()));
+					header = header.replaceAll("VAR_DEFAULT_DNS_1", primaryDNS);
+					header = header.replaceAll("VAR_DEFAULT_DNS_2", secondaryDNS);
+					header +="$ORIGIN  "+fqdn+".";
+					fw.write(header);
+					fw.write("\n");
+					fw.write(content);
+					fw.write("\n");
+					writeReverseNamedFile = true;
 				}
+				fw.flush();
+				fw.close();
 				
 				if(writeReverseNamedFile) {
-					writeIntoNamedFile(fqdn,ZoneFileWriter.reverseDIR+"/"+reverseFileName,new FileWriter(new File(winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName),true));
+					writeIntoNamedFile(fqdn,ZoneFileWriter.reverseDIR+"/"+reverseFileName,new FileWriter(new File(ZoneFileWriter.winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName),true));
 				}
 			}
 		}catch(Exception e) {
@@ -202,18 +269,17 @@ public class RecordFileWriter {
 		
 	}
 		
-	
 	public  boolean processData(LinkedHashMap<Long, DnsHostingInfoDTO> data,String ids) {
 		boolean status = false;
 		for(DnsHostingInfoDTO dto:data.values() ) {
 			
-			try {
-				
+			try {				
 				dto.setDomainName(java.net.IDN.toASCII(dto.getDomainName()));
-				String fileName = "db."+dto.getDomainName();
+				String domainName = dto.getDomainName();
+				String fileName = domainName;
 				String fileDIR = "";
 				
-				if(dto.getDomainName().endsWith(".bd")) {
+				if(domainName.endsWith(".bd")) {
 					for(String sld: dotBDSlds){
 						sld = sld+".bd";
 						if(dto.getDomainName().contains(sld)) {
@@ -224,19 +290,19 @@ public class RecordFileWriter {
 						}
 						
 					}					
-				}else if(dto.getDomainName().endsWith(".বাংলা")){
+				}else if(domainName.endsWith(".বাংলা")){
 					fileDIR = ZoneFileWriter.zoneFileDIRDOTBANGLA;
 				}else {
 					fileDIR = ZoneFileWriter.zoneFileDIROTHER;
 				}
 				
-				String filePath = winDir+ZoneFileWriter.zoneFileLocation+"/"+fileDIR+"/"+fileName;
+				String filePath = ZoneFileWriter.winDir+ZoneFileWriter.zoneFileLocation+"/"+fileDIR+"/"+fileName;
                 if(dto.getZoneFileForSlave()==1) {
-                	createZoneFile(dto);    				
-    				String namedFile = winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName;
-    				deleteContent(namedFile,dto.getDomainName());
-    				writeIntoNamedFile(dto.getDomainName(),fileDIR+"/"+fileName,new FileWriter(new File(namedFile),true));
-    					    				
+                	createZoneFile(dto); 
+                	Thread.sleep(100);
+    				String namedFile = ZoneFileWriter.winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName;
+    				//deleteContent(namedFile,dto.getDomainName());
+    				writeIntoNamedFile(domainName,fileDIR+"/"+fileName,new FileWriter(new File(namedFile),true));    					    				
 				}
 				else if(dto.getZoneFileForSlave()==2){
 					deleteZoneFileEntry(dto,filePath);
@@ -244,7 +310,7 @@ public class RecordFileWriter {
 				
 				
 				status = true;
-				Thread.sleep(200);
+				Thread.sleep(100);
 				
 			}catch(Exception e) {
 				logger.fatal(e.toString());

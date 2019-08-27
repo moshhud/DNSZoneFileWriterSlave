@@ -31,7 +31,7 @@ public class ZoneFileWriter extends Thread{
 	public static String namedFilePath = "/etc";
 	public static String namedFileName = "named.conf";
 	public static long interval = 60;
-	public static String master_server_ip = "123.49.12.149;123.49.12.182;";
+	public static String master_server_ip = "123.49.12.149;123.49.12.182";
 	public static String named_allowed_update_ip_rev = "123.49.12.3";
 	LinkedHashMap<Long, DnsHostingInfoDTO> data = null;
 	public static String primaryDNS = "dns.bttb.net.bd";
@@ -40,6 +40,7 @@ public class ZoneFileWriter extends Thread{
 	public static String parkingDNS1= "ns1.btclparked.com.bd";
 	public static String parkingDNS2= "ns2.btclparked.com.bd";
 	public static String parkingDNS3= null;
+	public static String winDir = "D:/root";	//test dir for windows
 	
 	String ids = "";
 	
@@ -55,9 +56,23 @@ public class ZoneFileWriter extends Thread{
 		if(obZoneFileWriter==null) {
 			obZoneFileWriter = new ZoneFileWriter();
 			LoadConfiguration();
+			if(isWindows()) {
+				winDir = "D:/root";
+			}else {
+				winDir = "";
+			}
 		}
 		return obZoneFileWriter;
 	}
+	
+	public static String getOsName(){
+		  String OS = null;
+	      if(OS == null) { OS = System.getProperty("os.name"); }
+	      return OS;
+	    }
+	public static boolean isWindows(){
+		      return getOsName().startsWith("Windows");
+    }
 	
 	@Override
 	public void run(){
@@ -83,9 +98,8 @@ public class ZoneFileWriter extends Thread{
 						t2 = System.currentTimeMillis();				
 						logger.debug("Time to finish job(ms): "+(t2-t1));
 						fw.runUnixCommand("bash","-c","rndc reload");
+						fw.runUnixCommand("bash","-c","named restart");
 					}
-				}else {
-					;//logger.debug("No Data found to write into zone file.");
 				}				
 				Thread.sleep(interval);
             }
@@ -142,7 +156,7 @@ public class ZoneFileWriter extends Thread{
 									LinkedHashMap<Long, DnsHostingZoneRecordDTO> zoneData = null;
 									long key;
 									
-									ReturnObject ro = dao.getDNSZoneRecordMap(DNS_ZONE_RECORD_TABLE_NAME, " and dnszrDnsID in("+ids+")");
+									ReturnObject ro = dao.getDNSZoneRecordMap(DNS_ZONE_RECORD_TABLE_NAME, " and dnszrDnsID in("+ids+") order by dnszrRecordType desc");
 									if (ro != null && ro.getIsSuccessful() && ro.getData() instanceof LinkedHashMap) {
 										zoneData = (LinkedHashMap<Long, DnsHostingZoneRecordDTO>) ro.getData();
 										if (zoneData != null && zoneData.size() > 0) {
@@ -183,9 +197,9 @@ public class ZoneFileWriter extends Thread{
 				
 				
 			}
-			else {
+			/*else {
 				logger.debug("No data found to write into zone file");
-			}
+			}*/
 			
 			
 		}catch (Exception ex)

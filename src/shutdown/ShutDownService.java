@@ -11,9 +11,11 @@ public class ShutDownService extends Thread
   public static final String SHUT_DOWN_FILE_NAME = "ShutDown.sd";
   static Logger logger = Logger.getLogger(ShutDownService.class.getClass());
   boolean running;
+  @SuppressWarnings("rawtypes")
   public Vector shutDownList;
   private static ShutDownService shutDownService = null;
 
+  @SuppressWarnings("rawtypes")
   private ShutDownService()
   {
     File file = new File("ShutDown.sd");
@@ -23,6 +25,7 @@ public class ShutDownService extends Thread
     start();
   }
 
+  @SuppressWarnings("unchecked")
   public void addShutDownListener(ShutDownListener sdl)
   {
     this.shutDownList.add(sdl);
