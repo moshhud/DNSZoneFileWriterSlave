@@ -14,6 +14,7 @@ import java.util.Map.Entry;
 import java.util.regex.Pattern;
 import org.apache.log4j.Logger;
 import dnshostinginfo.DnsHostingInfoDTO;
+import dnshostinginfo.DnsHostingPTRDTO;
 import dnshostinginfo.DnsHostingZoneRecordDTO;
 
 
@@ -196,7 +197,7 @@ public class RecordFileWriter {
     		logger.fatal(e.toString());
     	}
 	}	
-	public void removeDuplicate(String str,String fileName) {
+	public void removeEntry(String str,String fileName) {
 		try {	       
 	        BufferedReader file = new BufferedReader(new FileReader(fileName));
 	        String line;
@@ -236,7 +237,7 @@ public class RecordFileWriter {
 				FileWriter fw = null;
 				boolean writeReverseNamedFile = false;
 				if(file.exists()) {
-					removeDuplicate(value,fileName);
+					removeEntry(value,fileName);
 					fw = new FileWriter(file,true);					
 					fw.write(content);
 					fw.write("\n");
@@ -267,6 +268,94 @@ public class RecordFileWriter {
 			logger.fatal(e.toString());
 		}
 		
+	}
+	
+	public  void createReverseDNSFile(DnsHostingPTRDTO dto, String primaryDNS, String secondaryDNS) {
+		try {
+			
+			primaryDNS= primaryDNS.length()>3? primaryDNS:ZoneFileWriter.primaryDNS;
+			secondaryDNS = secondaryDNS.length()>3? secondaryDNS:ZoneFileWriter.secondaryDNS;
+			
+			String[] arr = dto.getIpAddress().split(Pattern.quote("."));
+			String reverse = arr[2]+"."+arr[1]+"."+arr[0];
+			String forward = arr[0]+"."+arr[1]+"."+arr[2];
+			logger.debug("reverse: "+reverse);
+			String value =dto.getEmailServerDomain();
+			String content = arr[3]+" PTR "+value;
+			String reverseFileName = "rev."+forward;
+			String fqdn = reverse+".in-addr.arpa";
+			String fileName = ZoneFileWriter.winDir+ZoneFileWriter.zoneFileLocation+"/"+ZoneFileWriter.reverseDIR+"/"+reverseFileName;
+			File file = new File(fileName);
+			FileWriter fw = null;
+			boolean writeReverseNamedFile = false;
+			
+			if(file.exists()) {
+				//remove duplicate
+				removeEntry(value,fileName);
+				fw = new FileWriter(file,true);					
+				fw.write(content);
+				fw.write("\n");				
+			}
+			else {
+				fw = new FileWriter(file,false);
+				String header = REVERSE_ZONE_FILE_CONSTANT_PORTION.replace("VAR_FQDN", fqdn);
+				header = header.replaceAll("VAR_DNS_1", primaryDNS);
+				header = header.replaceAll("VAR_DNS_2", secondaryDNS);					
+				header = header.replaceAll("VAR_SERIAL_NUMBER", getSerialNumber(System.currentTimeMillis()));
+				header = header.replaceAll("VAR_DEFAULT_DNS_1", primaryDNS);
+				header = header.replaceAll("VAR_DEFAULT_DNS_2", secondaryDNS);
+				header +="$ORIGIN  "+fqdn+".";
+				fw.write(header);
+				fw.write("\n");
+				fw.write(content);
+				fw.write("\n");
+				writeReverseNamedFile = true;
+			}
+			fw.flush();
+			fw.close();
+			
+			if(writeReverseNamedFile) {
+				writeIntoNamedFile(fqdn,ZoneFileWriter.reverseDIR+"/"+reverseFileName,new FileWriter(new File(ZoneFileWriter.winDir+ZoneFileWriter.namedFilePath+"/"+ZoneFileWriter.namedFileName),true));
+			}
+			
+		}
+		catch(Exception e) {
+			logger.fatal(e.toString());
+		}
+	}
+	
+	public  boolean processPTRData(LinkedHashMap<Long, DnsHostingPTRDTO> data,String ids) {
+		boolean status = false;
+		for(DnsHostingPTRDTO dto:data.values() ) {
+			try {
+				if(!dto.getEmailServerDomain().endsWith(".")) {
+					dto.setEmailServerDomain(dto.getEmailServerDomain()+".");
+				}
+				//1=add,2=edit,3=delete
+				if(dto.getZoneFileForSlave()==1 || dto.getZoneFileForSlave()==2) {
+					createReverseDNSFile(dto,"","");
+				}
+				else if(dto.getZoneFileForSlave()==3) {
+					String[] arr = dto.getIpAddress().split(Pattern.quote("."));
+					String reverse = arr[2]+"."+arr[1]+"."+arr[0];
+					String forward = arr[0]+"."+arr[1]+"."+arr[2];
+					logger.debug("reverse: "+reverse);
+					String value =dto.getEmailServerDomain();					
+					String reverseFileName = "rev."+forward;					
+					String fileName = ZoneFileWriter.winDir+ZoneFileWriter.zoneFileLocation+"/"+ZoneFileWriter.reverseDIR+"/"+reverseFileName;
+					 
+					removeEntry(value,fileName);
+				}
+				
+				status = true;
+				Thread.sleep(100);
+			}
+			catch(Exception e) {
+				logger.fatal(e.toString());
+			}
+		}
+		
+		return status;
 	}
 		
 	public  boolean processData(LinkedHashMap<Long, DnsHostingInfoDTO> data,String ids) {
